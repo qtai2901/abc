@@ -212,7 +212,12 @@ func (c *APIClient) GetUserList() (UserList *[]api.UserInfo, err error) {
 	for i := 0; i < numOfUsers; i++ {
 		user := api.UserInfo{}
 		user.UID = response.Get("data").GetIndex(i).Get("id").MustInt()
+		if c.SpeedLimit>0{
 		user.SpeedLimit = uint64(c.SpeedLimit * 1000000 / 8)
+			}
+		else {
+			user.SpeedLimit = uint64(response.Get("data").GetIndex(i).Get("speed_limit").MustFloat64() * 1000000 / 8)
+			}
 		user.DeviceLimit = c.DeviceLimit
 		switch c.NodeType {
 		case "Shadowsocks":
@@ -292,8 +297,38 @@ func (c *APIClient) ReportNodeStatus(nodeStatus *api.NodeStatus) (err error) {
 	return nil
 }
 
-//ReportNodeOnlineUsers implements the API interface
+//ReportNodeOnlineUsers reports online user ip
 func (c *APIClient) ReportNodeOnlineUsers(onlineUserList *[]api.OnlineUser) error {
+	var path string
+	switch c.NodeType {
+	case "V2ray":
+		path = "/api/v1/server/Deepbwork/onlinde"
+	case "Vless":
+		path = "/api/v1/server/Deepbwork/onlinde"
+	case "Trojan":
+		path = "/api/v1/server/TrojanTidalab/online"
+	case "Shadowsocks":
+		path = "/api/v1/server/ShadowsocksTidalab/online"
+	default:
+		return nil, fmt.Errorf("unsupported Node type: %s", c.NodeType)
+	}
+	data := make([]OnlineUser, len(*onlineUserList))
+	for i, user := range *onlineUserList {
+		data[i] = OnlineUser{UID: user.UID, IP: user.IP}
+	}
+	postData := &PostData{Type: nodeType, NodeId: c.NodeID, Onlines: data}
+
+	res, err := c.client.R().
+		SetHeader("Content-Type", "application/json").
+		SetBody(postData).
+		SetResult(&Response{}).
+		ForceContentType("application/json").
+		Post(path)
+	_, err = c.parseResponse(res, path, err)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
